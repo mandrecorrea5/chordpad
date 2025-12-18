@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chordpad-backend
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - DATABASE_URL=file:./prisma/dev.db
+      - FRONTEND_URL=http://localhost:5174
+    volumes:
+      - backend-data:/app/prisma
+    restart: unless-stopped
+    networks:
+      - chordpad-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: chordpad-frontend
+    ports:
+      - "5174:5174"
+    environment:
+      - VITE_API_URL=http://localhost:3002/api
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - chordpad-network
+
+volumes:
+  backend-data:
+
+networks:
+  chordpad-network:
+    driver: bridge
+

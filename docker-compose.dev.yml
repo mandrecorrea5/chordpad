@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chordpad-backend-dev
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - DATABASE_URL=file:./prisma/dev.db
+      - FRONTEND_URL=http://localhost:5174
+    volumes:
+      # Mapeia todo o código do backend (incluindo src/) para hot reload
+      - ./backend:/app
+      # Preserva node_modules do container
+      - /app/node_modules
+      # Persiste o banco de dados
+      - backend-data:/app/prisma
+    restart: unless-stopped
+    networks:
+      - chordpad-network
+    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run dev"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: chordpad-frontend-dev
+    ports:
+      - "5174:5174"
+    environment:
+      - VITE_API_URL=http://localhost:3002/api
+    volumes:
+      # Mapeia todo o código do frontend (incluindo src/) para hot reload
+      - ./frontend:/app
+      # Preserva node_modules do container
+      - /app/node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - chordpad-network
+
+volumes:
+  backend-data:
+
+networks:
+  chordpad-network:
+    driver: bridge
+
