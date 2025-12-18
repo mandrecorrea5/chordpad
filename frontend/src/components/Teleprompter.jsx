@@ -55,7 +55,11 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002/api';
 
 export default function Teleprompter() {
   const [songs, setSongs] = useState([]);
+  const [playlists, setPlaylists] = useState([]);
   const [selectedSong, setSelectedSong] = useState(null);
+  const [selectedPlaylist, setSelectedPlaylist] = useState(null);
+  const [currentPlaylistIndex, setCurrentPlaylistIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState('songs'); // 'songs' or 'playlists'
   const [isPlaying, setIsPlaying] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -63,6 +67,9 @@ export default function Teleprompter() {
   const [showNewSongForm, setShowNewSongForm] = useState(false);
   const [newSongTitle, setNewSongTitle] = useState('');
   const [newSongContent, setNewSongContent] = useState('');
+  const [showNewPlaylistForm, setShowNewPlaylistForm] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [editingPlaylist, setEditingPlaylist] = useState(null);
 
   const sections = selectedSong ? parseSongXML(selectedSong.content) : [];
   const sectionsRef = useRef(sections);
@@ -74,9 +81,20 @@ export default function Teleprompter() {
     currentSectionIndex,
     reset
   } = useScrollEngine(sections, isPlaying, (completedIndex) => {
-    // When song completes, stop playback
+    // When song completes, check if we're in a playlist
     if (completedIndex >= sectionsRef.current.length - 1) {
-      setIsPlaying(false);
+      if (selectedPlaylist && currentPlaylistIndex < selectedPlaylist.songs.length - 1) {
+        // Move to next song in playlist
+        const nextIndex = currentPlaylistIndex + 1;
+        setCurrentPlaylistIndex(nextIndex);
+        setSelectedSong(selectedPlaylist.songs[nextIndex]);
+        reset();
+        // Auto-play next song
+        setTimeout(() => setIsPlaying(true), 100);
+      } else {
+        // End of playlist or single song
+        setIsPlaying(false);
+      }
     }
   });
 
@@ -110,6 +128,16 @@ export default function Teleprompter() {
       setSongs(data);
     } catch (error) {
       console.error('Error fetching songs:', error);
+    }
+  };
+
+  const fetchPlaylists = async () => {
+    try {
+      const response = await fetch(`${API_URL}/playlists`);
+      const data = await response.json();
+      setPlaylists(data);
+    } catch (error) {
+      console.error('Error fetching playlists:', error);
     }
   };
 
@@ -180,7 +208,126 @@ export default function Teleprompter() {
 
   const handleReset = () => {
     setIsPlaying(false);
+    setCurrentPlaylistIndex(0);
     reset();
+  };
+
+  const handlePlayPlaylist = (playlist) => {
+    if (playlist.songs.length === 0) return;
+    setSelectedPlaylist(playlist);
+    setCurrentPlaylistIndex(0);
+    setSelectedSong(playlist.songs[0]);
+    setIsPlaying(true);
+    reset();
+  };
+
+  const handleNextSong = () => {
+    if (selectedPlaylist && currentPlaylistIndex < selectedPlaylist.songs.length - 1) {
+      const nextIndex = currentPlaylistIndex + 1;
+      setCurrentPlaylistIndex(nextIndex);
+      setSelectedSong(selectedPlaylist.songs[nextIndex]);
+      reset();
+      setIsPlaying(true);
+    }
+  };
+
+  const handlePreviousSong = () => {
+    if (selectedPlaylist && currentPlaylistIndex > 0) {
+      const prevIndex = currentPlaylistIndex - 1;
+      setCurrentPlaylistIndex(prevIndex);
+      setSelectedSong(selectedPlaylist.songs[prevIndex]);
+      reset();
+      setIsPlaying(true);
+    }
+  };
+
+  const handleCreatePlaylist = async () => {
+    const nameToSave = newPlaylistName.trim();
+    if (!nameToSave) return;
+    
+    try {
+      console.log('Creating playlist with name:', nameToSave); // Debug
+      const response = await fetch(`${API_URL}/playlists`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameToSave })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create playlist');
+      }
+      
+      const playlist = await response.json();
+      console.log('Playlist created response:', playlist); // Debug
+      
+      // Ensure name is preserved
+      if (!playlist.name) {
+        console.warn('Playlist created without name, using provided name');
+        playlist.name = nameToSave;
+      }
+      
+      // Add songCount and songs array if not present
+      const playlistWithDefaults = {
+        ...playlist,
+        name: playlist.name || nameToSave, // Ensure name is set
+        songCount: 0,
+        songs: []
+      };
+      
+      console.log('Final playlist object:', playlistWithDefaults); // Debug
+      setPlaylists([playlistWithDefaults, ...playlists]);
+      setNewPlaylistName('');
+      setShowNewPlaylistForm(false);
+    } catch (error) {
+      console.error('Error creating playlist:', error);
+      alert('Error creating playlist: ' + error.message);
+    }
+  };
+
+  const handleDeletePlaylist = async (playlistId) => {
+    if (!confirm('Are you sure you want to delete this playlist?')) return;
+    
+    try {
+      await fetch(`${API_URL}/playlists/${playlistId}`, {
+        method: 'DELETE'
+      });
+      setPlaylists(playlists.filter(p => p.id !== playlistId));
+      if (selectedPlaylist?.id === playlistId) {
+        setSelectedPlaylist(null);
+        setSelectedSong(null);
+      }
+    } catch (error) {
+      console.error('Error deleting playlist:', error);
+    }
+  };
+
+  const handleAddSongToPlaylist = async (playlistId, songId) => {
+    try {
+      await fetch(`${API_URL}/playlists/${playlistId}/songs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ songId })
+      });
+      fetchPlaylists(); // Refresh playlists
+    } catch (error) {
+      console.error('Error adding song to playlist:', error);
+    }
+  };
+
+  const handleRemoveSongFromPlaylist = async (playlistId, songId) => {
+    try {
+      await fetch(`${API_URL}/playlists/${playlistId}/songs/${songId}`, {
+        method: 'DELETE'
+      });
+      fetchPlaylists(); // Refresh playlists
+      if (selectedPlaylist?.id === playlistId) {
+        const updated = await fetch(`${API_URL}/playlists/${playlistId}`).then(r => r.json());
+        setSelectedPlaylist(updated);
+      }
+    } catch (error) {
+      console.error('Error removing song from playlist:', error);
+    }
   };
 
   const startEditing = () => {
@@ -203,20 +350,52 @@ export default function Teleprompter() {
         <h1 className="text-4xl font-bold mb-8 text-center">Smart Teleprompter</h1>
         
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar - Song List */}
+          {/* Sidebar - Song List / Playlists */}
           <div className="lg:col-span-1">
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">Songs</h2>
+              {/* Tabs */}
+              <div className="flex gap-2 mb-4 border-b border-gray-700">
                 <button
-                  onClick={() => setShowNewSongForm(!showNewSongForm)}
-                  className="p-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+                  onClick={() => {
+                    setActiveTab('songs');
+                    setSelectedPlaylist(null);
+                  }}
+                  className={`px-4 py-2 font-semibold transition ${
+                    activeTab === 'songs'
+                      ? 'text-blue-400 border-b-2 border-blue-400'
+                      : 'text-gray-400 hover:text-gray-300'
+                  }`}
                 >
-                  <Plus size={20} />
+                  Songs
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('playlists');
+                    setSelectedSong(null);
+                  }}
+                  className={`px-4 py-2 font-semibold transition ${
+                    activeTab === 'playlists'
+                      ? 'text-blue-400 border-b-2 border-blue-400'
+                      : 'text-gray-400 hover:text-gray-300'
+                  }`}
+                >
+                  Playlists
                 </button>
               </div>
 
-              {showNewSongForm && (
+              {activeTab === 'songs' && (
+                <>
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold">Songs</h2>
+                    <button
+                      onClick={() => setShowNewSongForm(!showNewSongForm)}
+                      className="p-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
+
+                  {showNewSongForm && (
                 <div className="mb-4 p-3 bg-gray-700 rounded-lg">
                   <input
                     type="text"
@@ -263,6 +442,8 @@ export default function Teleprompter() {
                     }`}
                     onClick={() => {
                       setSelectedSong(song);
+                      setSelectedPlaylist(null);
+                      setCurrentPlaylistIndex(0);
                       setIsPlaying(false);
                       reset();
                     }}
@@ -286,7 +467,154 @@ export default function Teleprompter() {
                     </div>
                   </div>
                 ))}
-              </div>
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'playlists' && (
+                <>
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-semibold">Playlists</h2>
+                    <button
+                      onClick={() => setShowNewPlaylistForm(!showNewPlaylistForm)}
+                      className="p-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+                    >
+                      <Plus size={20} />
+                    </button>
+                  </div>
+
+                  {showNewPlaylistForm && (
+                    <div className="mb-4 p-3 bg-gray-700 rounded-lg">
+                      <input
+                        type="text"
+                        placeholder="Playlist Name"
+                        value={newPlaylistName}
+                        onChange={(e) => setNewPlaylistName(e.target.value)}
+                        className="w-full mb-2 px-3 py-2 bg-gray-600 rounded text-white placeholder-gray-400"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleCreatePlaylist}
+                          className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded transition"
+                        >
+                          Create
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowNewPlaylistForm(false);
+                            setNewPlaylistName('');
+                          }}
+                          className="px-3 py-2 bg-gray-600 hover:bg-gray-500 rounded transition"
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {playlists.map((playlist) => (
+                      <div
+                        key={playlist.id}
+                        className={`p-3 rounded-lg cursor-pointer transition ${
+                          selectedPlaylist?.id === playlist.id
+                            ? 'bg-blue-600'
+                            : 'bg-gray-700 hover:bg-gray-600'
+                        }`}
+                        onClick={() => {
+                          setSelectedPlaylist(playlist);
+                          setCurrentPlaylistIndex(0);
+                          if ((playlist.songs?.length ?? 0) > 0) {
+                            setSelectedSong(playlist.songs[0]);
+                          }
+                        }}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-white break-words">{playlist.name || 'Unnamed Playlist'}</h3>
+                            {!playlist.name && <span className="text-xs text-yellow-400">(No name)</span>}
+                            <p className={`text-xs mt-1 ${
+                              selectedPlaylist?.id === playlist.id ? 'text-blue-100' : 'text-gray-300'
+                            }`}>
+                              {playlist.songCount ?? (playlist.songs?.length ?? 0)} songs
+                            </p>
+                          </div>
+                          <div className="flex gap-1">
+                            {(playlist.songs?.length ?? 0) > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePlayPlaylist(playlist);
+                                }}
+                                className="p-1 hover:bg-blue-700 rounded"
+                                title="Play"
+                              >
+                                <Play size={14} />
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletePlaylist(playlist.id);
+                              }}
+                              className="p-1 hover:bg-red-600 rounded"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        {selectedPlaylist?.id === playlist.id && (playlist.songs?.length ?? 0) > 0 && (
+                          <div className="mt-2 pt-2 border-t border-gray-600">
+                            <div className="text-xs text-gray-400 mb-1">Songs in playlist:</div>
+                            {(playlist.songs || []).map((song, idx) => (
+                              <div
+                                key={song.id}
+                                className={`flex justify-between items-center p-2 rounded text-sm ${
+                                  idx === currentPlaylistIndex && selectedPlaylist?.id === playlist.id
+                                    ? 'bg-blue-500'
+                                    : 'bg-gray-600'
+                                }`}
+                              >
+                                <span className="truncate flex-1">{song.title}</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveSongFromPlaylist(playlist.id, song.id);
+                                  }}
+                                  className="ml-2 p-1 hover:bg-red-600 rounded"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add songs to selected playlist */}
+                  {selectedPlaylist && (
+                    <div className="mt-4 pt-4 border-t border-gray-700">
+                      <div className="text-sm text-gray-400 mb-2">Add songs to playlist:</div>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {songs
+                          .filter(song => !(selectedPlaylist.songs || []).some(ps => ps.id === song.id))
+                          .map((song) => (
+                            <button
+                              key={song.id}
+                              onClick={() => handleAddSongToPlaylist(selectedPlaylist.id, song.id)}
+                              className="w-full text-left p-2 text-sm bg-gray-700 hover:bg-gray-600 rounded transition"
+                            >
+                              {song.title}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
@@ -345,30 +673,59 @@ export default function Teleprompter() {
                       bpm={sections[currentSectionIndex]?.bpm || 0} 
                       isPlaying={isPlaying}
                     />
+                  <div className="flex items-center gap-6">
+                    <BPMIndicator 
+                      bpm={sections[currentSectionIndex]?.bpm || 0} 
+                      isPlaying={isPlaying}
+                    />
                     <div className="flex gap-2">
-                    <button
-                      onClick={startEditing}
-                      className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
-                      title="Edit"
-                    >
-                      <Edit2 size={20} />
-                    </button>
-                    <button
-                      onClick={handlePlayPause}
-                      className="p-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
-                      title={isPlaying ? 'Pause' : 'Play'}
-                    >
-                      {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-                    </button>
-                    <button
-                      onClick={handleReset}
-                      className="p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
-                      title="Reset"
-                    >
-                      <RotateCcw size={24} />
-                    </button>
+                      {selectedPlaylist && (
+                        <>
+                          <button
+                            onClick={handlePreviousSong}
+                            disabled={currentPlaylistIndex === 0}
+                            className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Previous Song"
+                          >
+                            ←
+                          </button>
+                          <div className="px-3 py-2 text-sm text-gray-400">
+                            {currentPlaylistIndex + 1} / {selectedPlaylist.songs.length}
+                          </div>
+                          <button
+                            onClick={handleNextSong}
+                            disabled={currentPlaylistIndex >= selectedPlaylist.songs.length - 1}
+                            className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Next Song"
+                          >
+                            →
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={startEditing}
+                        className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+                        title="Edit"
+                      >
+                        <Edit2 size={20} />
+                      </button>
+                      <button
+                        onClick={handlePlayPause}
+                        className="p-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+                        title={isPlaying ? 'Pause' : 'Play'}
+                      >
+                        {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+                      </button>
+                      <button
+                        onClick={handleReset}
+                        className="p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+                        title="Reset"
+                      >
+                        <RotateCcw size={24} />
+                      </button>
                     </div>
                   </div>
+                </div>
                 </div>
 
                 {/* Teleprompter Display */}

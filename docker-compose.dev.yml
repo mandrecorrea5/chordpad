@@ -10,15 +10,17 @@ services:
       - "3002:3002"
     environment:
       - PORT=3002
-      - DATABASE_URL=file:./prisma/dev.db
+      - DATABASE_URL=file:./prisma/data/dev.db
       - FRONTEND_URL=http://localhost:5174
     volumes:
       # Mapeia todo o código do backend (incluindo src/) para hot reload
       - ./backend:/app
-      # Preserva node_modules do container
+      # Preserva node_modules do container (mas permite regenerar Prisma)
       - /app/node_modules
-      # Persiste o banco de dados
-      - backend-data:/app/prisma
+      # Persiste apenas o banco de dados (não o schema.prisma)
+      - backend-data:/app/prisma/data
+      # Garante que o schema.prisma sempre vem do código local
+      - ./backend/prisma/schema.prisma:/app/prisma/schema.prisma:ro
     restart: unless-stopped
     networks:
       - chordpad-network
