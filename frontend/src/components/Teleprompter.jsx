@@ -3,6 +3,54 @@ import { Play, Pause, RotateCcw, Plus, Edit2, Trash2, Save, X } from 'lucide-rea
 import { parseSongXML, formatContentWithChords } from '../utils/xmlParser';
 import { useScrollEngine } from '../hooks/useScrollEngine';
 
+// BPM Visual Indicator Component - Discreet pulsing red circle
+function BPMIndicator({ bpm, isPlaying }) {
+  const intervalRef = useRef(null);
+  const [isPulsing, setIsPulsing] = useState(false);
+
+  useEffect(() => {
+    if (isPlaying && bpm > 0) {
+      // Calculate interval in milliseconds (60 seconds / BPM * 1000ms)
+      const interval = (60 / bpm) * 1000;
+      
+      setIsPulsing(true);
+      intervalRef.current = setInterval(() => {
+        setIsPulsing(true);
+        setTimeout(() => setIsPulsing(false), 100);
+      }, interval);
+
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      };
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      setIsPulsing(false);
+    }
+  }, [bpm, isPlaying]);
+
+  if (!isPlaying || bpm === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="w-2 h-2 rounded-full bg-red-500"
+        style={{
+          opacity: isPulsing ? 1 : 0.4,
+          transform: isPulsing ? 'scale(1.5)' : 'scale(1)',
+          transition: 'all 0.1s ease-out',
+          boxShadow: isPulsing ? '0 0 8px rgba(239, 68, 68, 0.6)' : 'none'
+        }}
+      />
+    </div>
+  );
+}
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002/api';
 
 export default function Teleprompter() {
@@ -285,14 +333,19 @@ export default function Teleprompter() {
               <div className="bg-gray-800 rounded-lg p-6">
                 {/* Controls */}
                 <div className="flex justify-between items-center mb-6">
-                  <div>
+                  <div className="flex-1">
                     <h2 className="text-2xl font-bold">{selectedSong.title}</h2>
                     <p className="text-sm text-gray-400 mt-1">
                       {sections.length} sections • Current: {sections[currentSectionIndex]?.type || 'N/A'} 
-                      ({sections[currentSectionIndex]?.bpm || 0} BPM, {sections[currentSectionIndex]?.bars || 0} bars)
+                      ({sections[currentSectionIndex]?.bars || 0} bars)
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-6">
+                    <BPMIndicator 
+                      bpm={sections[currentSectionIndex]?.bpm || 0} 
+                      isPlaying={isPlaying}
+                    />
+                    <div className="flex gap-2">
                     <button
                       onClick={startEditing}
                       className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
@@ -314,6 +367,7 @@ export default function Teleprompter() {
                     >
                       <RotateCcw size={24} />
                     </button>
+                    </div>
                   </div>
                 </div>
 
