@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+import { Play, Pause, RotateCcw, Plus, Edit2, Trash2, Save, X, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 import { parseSongXML, formatContentWithChords } from '../utils/xmlParser';
 import { useScrollEngine } from '../hooks/useScrollEngine';
 
@@ -70,6 +70,7 @@ export default function Teleprompter() {
   const [showNewPlaylistForm, setShowNewPlaylistForm] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [editingPlaylist, setEditingPlaylist] = useState(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const sections = selectedSong ? parseSongXML(selectedSong.content) : [];
   const sectionsRef = useRef(sections);
@@ -116,9 +117,10 @@ export default function Teleprompter() {
     }
   }, [scrollContainerRef, contentRef, sections.length]);
 
-  // Fetch songs on mount
+  // Fetch songs and playlists on mount
   useEffect(() => {
     fetchSongs();
+    fetchPlaylists();
   }, []);
 
   const fetchSongs = async () => {
@@ -349,10 +351,21 @@ export default function Teleprompter() {
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold mb-8 text-center">Smart Teleprompter</h1>
         
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className={`grid grid-cols-1 gap-6 transition-all duration-300 ${isSidebarCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-4'}`}>
           {/* Sidebar - Song List / Playlists */}
-          <div className="lg:col-span-1">
-            <div className="bg-gray-800 rounded-lg p-4">
+          {!isSidebarCollapsed && (
+            <div className="lg:col-span-1">
+              <div className="bg-gray-800 rounded-lg p-4">
+                {/* Collapse Button */}
+                <div className="flex justify-end mb-2">
+                  <button
+                    onClick={() => setIsSidebarCollapsed(true)}
+                    className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+                    title="Collapse menu"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                </div>
               {/* Tabs */}
               <div className="flex gap-2 mb-4 border-b border-gray-700">
                 <button
@@ -615,11 +628,25 @@ export default function Teleprompter() {
                   )}
                 </>
               )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Main Content - Teleprompter */}
-          <div className="lg:col-span-3">
+          <div className={isSidebarCollapsed ? 'lg:col-span-1' : 'lg:col-span-3'}>
+            {/* Expand Menu Button (shown when sidebar is collapsed) */}
+            {isSidebarCollapsed && (
+              <div className="mb-4">
+                <button
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition flex items-center gap-2"
+                  title="Expand menu"
+                >
+                  <Menu size={20} />
+                  <span>Menu</span>
+                </button>
+              </div>
+            )}
             {!selectedSong ? (
               <div className="bg-gray-800 rounded-lg p-8 text-center">
                 <p className="text-gray-400">Select a song or create a new one to start</p>

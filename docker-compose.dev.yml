@@ -10,7 +10,7 @@ services:
       - "3002:3002"
     environment:
       - PORT=3002
-      - DATABASE_URL=file:./prisma/data/dev.db
+      - DATABASE_URL=file:./data/dev.db
       - FRONTEND_URL=http://localhost:5174
     volumes:
       # Mapeia todo o código do backend (incluindo src/) para hot reload
