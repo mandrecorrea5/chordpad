@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw, Plus, Edit2, Trash2, Save, X, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+import { Play, Pause, RotateCcw, Plus, Edit2, Trash2, Save, X, ChevronLeft, ChevronRight, Menu, Maximize2, Minimize2 } from 'lucide-react';
 import { parseSongXML, formatContentWithChords } from '../utils/xmlParser';
 import { useScrollEngine } from '../hooks/useScrollEngine';
 
@@ -71,6 +71,7 @@ export default function Teleprompter() {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [editingPlaylist, setEditingPlaylist] = useState(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isPresentationMode, setIsPresentationMode] = useState(false);
 
   const sections = selectedSong ? parseSongXML(selectedSong.content) : [];
   const sectionsRef = useRef(sections);
@@ -345,6 +346,100 @@ export default function Teleprompter() {
     setEditTitle('');
     setEditContent('');
   };
+
+  // Presentation Mode - Full screen with only lyrics/chords
+  if (isPresentationMode && selectedSong) {
+    return (
+      <div className="fixed inset-0 bg-black text-white z-50 overflow-hidden">
+        {/* Minimal floating controls */}
+        <div className="absolute top-4 right-4 flex gap-2 opacity-0 hover:opacity-100 transition-opacity duration-300 z-10">
+          <button
+            onClick={handlePlayPause}
+            className="p-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+            title={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+          </button>
+          <button
+            onClick={handleReset}
+            className="p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+            title="Reset"
+          >
+            <RotateCcw size={24} />
+          </button>
+          <button
+            onClick={() => setIsPresentationMode(false)}
+            className="p-3 bg-red-600 hover:bg-red-700 rounded-lg transition"
+            title="Exit Presentation Mode"
+          >
+            <Minimize2 size={24} />
+          </button>
+        </div>
+
+        {/* BPM Indicator in presentation mode */}
+        <div className="absolute top-4 left-4 z-10">
+          <BPMIndicator 
+            bpm={sections[currentSectionIndex]?.bpm || 0} 
+            isPlaying={isPlaying}
+          />
+        </div>
+
+        {/* Full screen teleprompter */}
+        <div
+          ref={scrollContainerRef}
+          className="w-full h-full overflow-y-auto bg-black"
+          style={{ 
+            scrollBehavior: 'auto',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          <div 
+            ref={contentRef} 
+            className="max-w-5xl mx-auto px-12 py-16 space-y-12"
+            style={{ minHeight: '100%' }}
+          >
+            {sections.map((section, index) => {
+              const formattedLines = formatContentWithChords(section.content);
+              const isActive = index === currentSectionIndex;
+              
+              return (
+                <div
+                  key={index}
+                  data-section-index={index}
+                  className={`transition-all duration-300 ${
+                    isActive ? 'opacity-100' : 'opacity-40'
+                  }`}
+                >
+                  <div className="mb-6">
+                    <span className="text-2xl font-semibold text-gray-400 uppercase">
+                      {section.type}
+                    </span>
+                    <span className="ml-4 text-lg text-gray-500">
+                      {section.bpm} BPM • {section.bars} bars
+                    </span>
+                  </div>
+                  <div className="text-4xl leading-relaxed font-light">
+                    {formattedLines.map((line, lineIndex) => (
+                      <div key={lineIndex} className="mb-3">
+                        {line.map((part, partIndex) => (
+                          <span
+                            key={partIndex}
+                            className={part.isChord ? 'text-blue-400 font-semibold' : ''}
+                          >
+                            {part.text}
+                          </span>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -700,11 +795,6 @@ export default function Teleprompter() {
                       bpm={sections[currentSectionIndex]?.bpm || 0} 
                       isPlaying={isPlaying}
                     />
-                  <div className="flex items-center gap-6">
-                    <BPMIndicator 
-                      bpm={sections[currentSectionIndex]?.bpm || 0} 
-                      isPlaying={isPlaying}
-                    />
                     <div className="flex gap-2">
                       {selectedPlaylist && (
                         <>
@@ -750,9 +840,15 @@ export default function Teleprompter() {
                       >
                         <RotateCcw size={24} />
                       </button>
+                      <button
+                        onClick={() => setIsPresentationMode(true)}
+                        className="p-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition"
+                        title="Presentation Mode"
+                      >
+                        <Maximize2 size={24} />
+                      </button>
                     </div>
                   </div>
-                </div>
                 </div>
 
                 {/* Teleprompter Display */}
